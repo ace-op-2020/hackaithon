@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>TrelliX Browser Controller</title>
+    <style>
+        body {
+            width: 300px;
+            padding: 16px;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f8f9fa;
+            margin: 0;
+        }
+        
+        .header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 16px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid #e9ecef;
+        }
+        
+        .logo {
+            width: 24px;
+            height: 24px;
+            background: #0066cc;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+            font-size: 14px;
+            margin-right: 8px;
+        }
+        
+        .title {
+            font-size: 16px;
+            font-weight: 600;
+            color: #212529;
+        }
+        
+        .status {
+            display: flex;
+            align-items: center;
+            padding: 12px;
+            background: white;
+            border-radius: 8px;
+            margin-bottom: 16px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        
+        .status-indicator {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+        
+        .status-indicator.active {
+            background: #28a745;
+        }
+        
+        .status-indicator.inactive {
+            background: #dc3545;
+        }
+        
+        .status-text {
+            font-size: 14px;
+            color: #495057;
+        }
+        
+        .button {
+            width: 100%;
+            padding: 12px;
+            background: #0066cc;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            margin-bottom: 8px;
+            transition: background-color 0.2s;
+        }
+        
+        .button:hover {
+            background: #0056b3;
+        }
+        
+        .button.secondary {
+            background: #6c757d;
+        }
+        
+        .button.secondary:hover {
+            background: #545b62;
+        }
+        
+        .info {
+            font-size: 12px;
+            color: #6c757d;
+            line-height: 1.4;
+            margin-top: 12px;
+            padding-top: 12px;
+            border-top: 1px solid #e9ecef;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="logo">T</div>
+        <div class="title">TrelliX Controller</div>
+    </div>
+    
+    <div class="status">
+        <div class="status-indicator" id="statusIndicator"></div>
+        <div class="status-text" id="statusText">Checking connection...</div>
+    </div>
+    
+    <button class="button" id="openApp">Open TrelliX App</button>
+    <button class="button secondary" id="toggleExtension">Enable Extension</button>
+    
+    <div class="info">
+        <strong>Browser Automation Controller</strong><br>
+        Safely controls browser tabs and DOM elements. Only works on allowed domains and never touches your filesystem or OS.
+        <br><br>
+        <strong>Allowed domains:</strong><br>
+        • localhost<br>
+        • google.com<br>
+        • github.com
+    </div>
+
+    <script src="popup.js"></script>
+</body>
+</html>
