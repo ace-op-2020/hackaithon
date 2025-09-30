@@ -1,0 +1,31 @@
+# Extended dependencies for full LangChain functionality
+# Install these after the base requirements if you want complete features
+
+# First install the base langchain packages
+langchain==0.1.17
+langsmith==0.1.17
+
+# Then install the extensions
+langchain-google-vertexai==1.0.1
+langchain-community==0.0.38
+langchain-experimental==0.0.58
+
+# Additional AI/ML dependencies
+sentence-transformers>=2.2.2
+tiktoken>=0.5.2
+json-repair>=0.20.0
+
+# NLP dependencies
+spacy>=3.7.2
+nltk>=3.8.1
+
+# Advanced web scraping
+scrapy>=2.11.0
+
+# Additional Google Cloud services
+google-cloud-documentai>=2.20.1
+
+# Installation order:
+# 1. pip install -r requirements.txt
+# 2. pip install -r requirements-extended.txt
+# 3. python -m spacy download en_core_web_sm

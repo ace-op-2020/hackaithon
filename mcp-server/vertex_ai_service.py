@@ -8,6 +8,8 @@ import json
 from typing import Dict, Any, List, Optional
 import vertexai
 from vertexai.preview.generative_models import GenerativeModel
+from vertexai.language_models import TextEmbeddingModel
+from google.cloud import spanner
 
 from mcp_protocol import MCPResponse, ActionStep, ActionType, Priority
 
@@ -18,11 +20,18 @@ class VertexAIService:
         self.project_id = "svc-hackathon-prod15"
         self.location = "us-central1"
         self.model_name = "gemini-2.0-flash-lite-001"
+        self.embedding_model_name = "text-embedding-004"
         self.model = None
+        self.embedding_model = None
+        self.spanner_client = None
+        self.spanner_instance_id = "trellix-knowledge-graph"
+        self.spanner_database_id = "knowledge_graph_db"
+        self.vector_table_name = "trellix_document_embeddings"
         self.initialized = False
+        self.rag_enabled = True
     
     async def initialize(self):
-        """Initialize the Vertex AI service"""
+        """Initialize the Vertex AI service with RAG capabilities"""
         try:
             # Set credentials path - using the file from root directory
             credentials_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "svc-hackathon-prod15-534bc641841c.json")
@@ -33,15 +42,33 @@ class VertexAIService:
             # Initialize Vertex AI
             vertexai.init(project=self.project_id, location=self.location)
             
-            # Load the model
+            # Load the generative model
             self.model = GenerativeModel(self.model_name)
+            
+            # Load the embedding model for RAG
+            self.embedding_model = TextEmbeddingModel.from_pretrained(self.embedding_model_name)
+            
+            # Initialize Spanner client for vector database access
+            self.spanner_client = spanner.Client(project=self.project_id)
+            
             self.initialized = True
             
             print(f"✅ Vertex AI initialized with model: {self.model_name}")
+            print(f"✅ Embedding model initialized: {self.embedding_model_name}")
+            print(f"✅ RAG capabilities enabled with Spanner vector database")
             
         except Exception as e:
-            print(f"❌ Failed to initialize Vertex AI: {e}")
-            raise e
+            print(f"❌ Failed to initialize Vertex AI with RAG: {e}")
+            # Try to initialize without RAG as fallback
+            try:
+                vertexai.init(project=self.project_id, location=self.location)
+                self.model = GenerativeModel(self.model_name)
+                self.initialized = True
+                self.rag_enabled = False
+                print(f"⚠️ Vertex AI initialized without RAG capabilities")
+            except Exception as fallback_error:
+                print(f"❌ Failed to initialize Vertex AI even without RAG: {fallback_error}")
+                raise fallback_error
     
     async def health_check(self) -> str:
         """Check if the service is healthy"""
@@ -54,6 +81,177 @@ class VertexAIService:
             return "healthy" if response else "error"
         except Exception:
             return "error"
+    
+    async def generate_embeddings(self, texts: List[str]) -> List[List[float]]:
+        """Generate embeddings for text using Vertex AI"""
+        if not self.rag_enabled or not self.embedding_model:
+            return []
+        
+        try:
+            embeddings = []
+            batch_size = 100
+            
+            for i in range(0, len(texts), batch_size):
+                batch = texts[i:i + batch_size]
+                batch_embeddings = self.embedding_model.get_embeddings(batch)
+                embeddings.extend([emb.values for emb in batch_embeddings])
+            
+            return embeddings
+        except Exception as e:
+            print(f"❌ Error generating embeddings: {e}")
+            return []
+    
+    async def search_similar_documents(self, query: str, n_results: int = 5) -> List[Dict[str, Any]]:
+        """Search for similar documents in the Spanner vector database"""
+        if not self.rag_enabled or not self.spanner_client:
+            print("⚠️ RAG is disabled or Spanner client not available")
+            return []
+        
+        try:
+            # Generate embedding for the query
+            query_embeddings = await self.generate_embeddings([query])
+            if not query_embeddings:
+                return []
+            
+            query_embedding = query_embeddings[0]
+            
+            # Search in Spanner vector database
+            instance = self.spanner_client.instance(self.spanner_instance_id)
+            database = instance.database(self.spanner_database_id)
+            
+            # Query to find similar documents using cosine similarity
+            # Note: This is a simplified approach - for production, use Spanner's vector search capabilities
+            with database.snapshot() as snapshot:
+                results = snapshot.execute_sql(f"""
+                    SELECT 
+                        chunk_id,
+                        document_id, 
+                        content,
+                        metadata,
+                        embedding_vector
+                    FROM {self.vector_table_name}
+                    LIMIT 100
+                """)
+                
+                documents = []
+                for row in results:
+                    try:
+                        stored_embedding = json.loads(row[4]) if row[4] else []
+                        if stored_embedding:
+                            # Calculate cosine similarity
+                            similarity = self._cosine_similarity(query_embedding, stored_embedding)
+                            
+                            documents.append({
+                                'chunk_id': row[0],
+                                'document_id': row[1], 
+                                'content': row[2],
+                                'metadata': json.loads(row[3]) if row[3] else {},
+                                'similarity_score': similarity
+                            })
+                    except Exception as e:
+                        print(f"⚠️ Error processing document row: {e}")
+                        continue
+                
+                # Sort by similarity and return top results
+                documents.sort(key=lambda x: x['similarity_score'], reverse=True)
+                return documents[:n_results]
+                
+        except Exception as e:
+            print(f"❌ Error searching similar documents: {e}")
+            return []
+    
+    def _cosine_similarity(self, vec1: List[float], vec2: List[float]) -> float:
+        """Calculate cosine similarity between two vectors"""
+        try:
+            import math
+            
+            # Calculate dot product
+            dot_product = sum(a * b for a, b in zip(vec1, vec2))
+            
+            # Calculate magnitudes
+            magnitude1 = math.sqrt(sum(a * a for a in vec1))
+            magnitude2 = math.sqrt(sum(a * a for a in vec2))
+            
+            # Avoid division by zero
+            if magnitude1 == 0 or magnitude2 == 0:
+                return 0.0
+            
+            return dot_product / (magnitude1 * magnitude2)
+        except Exception:
+            return 0.0
+    
+    async def get_rag_context(self, query: str, n_results: int = 3) -> str:
+        """Get relevant context from knowledge base for RAG"""
+        if not self.rag_enabled:
+            return ""
+        
+        try:
+            similar_docs = await self.search_similar_documents(query, n_results)
+            
+            if not similar_docs:
+                return ""
+            
+            context_parts = []
+            for i, doc in enumerate(similar_docs, 1):
+                content = doc['content'][:500]  # Limit content length
+                metadata = doc.get('metadata', {})
+                source = metadata.get('source', 'Unknown')
+                title = metadata.get('title', 'Untitled')
+                
+                context_parts.append(f"""
+Document {i} (Source: {source}, Title: {title}, Similarity: {doc['similarity_score']:.3f}):
+{content}
+""")
+            
+            return "\n".join(context_parts)
+            
+        except Exception as e:
+            print(f"❌ Error getting RAG context: {e}")
+            return ""
+    
+    async def answer_question_with_rag(self, question: str) -> str:
+        """Answer a general question using RAG (Retrieval-Augmented Generation)"""
+        if not self.initialized:
+            raise Exception("Vertex AI service not initialized")
+        
+        try:
+            print(f"🤖 Answering question with RAG: {question}")
+            
+            # Get relevant context from knowledge base
+            rag_context = await self.get_rag_context(question, n_results=5)
+            
+            # Build RAG prompt
+            rag_prompt = f"""
+You are an expert assistant for Trellix cybersecurity products and services. Use the following relevant documentation from the knowledge base to answer the user's question accurately and comprehensively.
+
+USER QUESTION: "{question}"
+
+RELEVANT DOCUMENTATION:
+{rag_context if rag_context else "No relevant documentation found in knowledge base."}
+
+INSTRUCTIONS:
+1. Answer the question using primarily the information from the provided documentation
+2. If the documentation doesn't contain enough information, clearly state what information is missing
+3. Provide specific, actionable information when possible
+4. Include relevant details about Trellix products, features, or configurations mentioned in the documentation
+5. If no relevant documentation is found, provide a general response based on your knowledge but clearly indicate this
+
+Please provide a comprehensive and helpful answer:
+"""
+            
+            # Get response from Vertex AI
+            print("🧠 Generating RAG response...")
+            response = self.model.generate_content(rag_prompt)
+            
+            if not response or not response.text:
+                return "I apologize, but I couldn't generate a response to your question. Please try rephrasing your question."
+            
+            print(f"✅ Generated RAG response with {len(rag_context)} characters of context")
+            return response.text
+            
+        except Exception as e:
+            print(f"❌ Error answering question with RAG: {e}")
+            return f"I encountered an error while processing your question: {str(e)}. Please try again."
     
     async def process_user_request(
         self, 
@@ -72,8 +270,8 @@ class VertexAIService:
             print(f"📍 Current page: {current_page}")
             print(f"🔍 Context keys: {list(context.keys()) if context else 'None'}")
             
-            # Build the prompt for the LLM
-            prompt = self._build_automation_prompt(user_request, context, current_page)
+            # Build the prompt for the LLM with RAG context
+            prompt = await self._build_automation_prompt(user_request, context, current_page)
             
             # Get response from Vertex AI
             print("🧠 Sending request to Vertex AI...")
@@ -266,13 +464,13 @@ class VertexAIService:
             print(f"⚠️ Error generating response message: {e}")
             return f"Generated {len(action_steps)} action steps for: {user_request}"
     
-    def _build_automation_prompt(
+    async def _build_automation_prompt(
         self, 
         user_request: str, 
         context: Optional[Dict[str, Any]], 
         current_page: Optional[str]
     ) -> str:
-        """Build a comprehensive prompt for the LLM"""
+        """Build a comprehensive prompt for the LLM with RAG context"""
         
         # Extract comprehensive context information
         page_elements = context.get('page_elements', []) if context else []
@@ -284,6 +482,9 @@ class VertexAIService:
         page_data = context.get('page_data', {}) if context else {}
         user_intent_context = context.get('user_intent_context', {}) if context else {}
         
+        # Get RAG context from knowledge base
+        rag_context = await self.get_rag_context(user_request, n_results=3)
+        
         # Build enhanced sitemap and context information
         sitemap_info = self._build_enhanced_sitemap_info(context)
         page_structure_info = self._build_page_structure_info(page_elements)
@@ -293,6 +494,9 @@ class VertexAIService:
 You are an expert web automation assistant for a React integration management application. A user wants to perform the following action:
 
 USER REQUEST: "{user_request}"
+
+RELEVANT KNOWLEDGE BASE CONTEXT:
+{rag_context if rag_context else "No relevant documentation found in knowledge base."}
 
 CURRENT APPLICATION STATE:
 - Current Page: {current_page or "Unknown"}
