@@ -5,7 +5,7 @@ class GoogleCloudService {
   constructor() {
     this.projectId = process.env.REACT_APP_GOOGLE_CLOUD_PROJECT_ID || 'svc-hackathon-prod15';
     this.location = process.env.REACT_APP_GOOGLE_CLOUD_REGION || 'us-central1';
-    this.model = process.env.REACT_APP_GEMINI_MODEL || 'gemini-1.5-flash';
+    this.model = process.env.REACT_APP_GEMINI_MODEL || 'gemini-2.0-flash-lite-001';
     this.accessToken = process.env.REACT_APP_GOOGLE_CLOUD_ACCESS_TOKEN;
     this.apiKey = process.env.REACT_APP_GOOGLE_API_KEY;
     this.serviceAccountPath = process.env.REACT_APP_GOOGLE_CLOUD_SERVICE_ACCOUNT_PATH;

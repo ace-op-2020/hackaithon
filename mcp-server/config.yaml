@@ -1,0 +1,46 @@
+# Trellix Knowledge Graph Builder Configuration
+credentials_path: "./svc-hackathon-prod15-534bc641841c.json"
+log_level: "INFO"
+output_directory: "./output"
+
+confluence:
+  url: "https://trellix.atlassian.net/wiki"
+  username: "aayush.choudhry@trellix.com"
+  api_token: ""
+  spaces: ["XDR"]
+  page_limit: 1000
+
+web_scraping:
+  domains:
+    - "https://www.trellix.com"
+    - "https://docs.trellix.com"
+  max_pages_per_domain: 100
+  request_delay: 1.0
+
+vertex_ai:
+  project_id: "svc-hackathon-prod15"
+  location: "us-central1"
+  model_name: "gemini-2.0-flash-lite-001"
+  embedding_model: "text-embedding-004"
+
+spanner:
+  instance_id: "trellix-knowledge-graph"
+  database_id: "knowledge_graph_db"
+  vector_table: "trellix_document_embeddings"
+
+# RAG Configuration
+rag:
+  enabled: true
+  max_context_documents: 5
+  similarity_threshold: 0.7
+  max_context_length: 2000
+
+processing:
+  chunk_size: 1000
+  chunk_overlap: 200
+  language: "en"
+
+graph:
+  max_nodes: 50000
+  similarity_threshold: 0.8
+  confidence_threshold: 0.5
